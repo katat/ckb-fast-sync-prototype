@@ -1,0 +1,41 @@
+{
+    "env": {
+        "es6": true,
+        "node": true,
+        "mocha": true
+    },
+    "parserOptions": {
+        "sourceType": "script",
+        "ecmaVersion": 9,
+        "ecmaFeatures": {
+            "impliedStrict": false
+        }
+    },
+    "rules": {
+        "indent": ["error", 4],
+        "linebreak-style": [
+            "error",
+            "unix"
+        ],
+        "quotes": [
+            "error",
+            "single"
+        ],
+        "semi": [
+            "error",
+            "always"
+        ],
+        "comma-dangle": [
+            "error", 
+            "never"
+        ],
+        "no-console": 0,
+        "no-multi-spaces": [
+            "error"
+        ],
+        "brace-style": ["error", "stroustrup", { "allowSingleLine": true }],
+        "curly": ["error", "multi-or-nest", "consistent"],
+        "strict": ["error", "global"]
+    },
+    "extends": "eslint:recommended"
+}
