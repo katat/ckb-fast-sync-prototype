@@ -61,26 +61,52 @@ const createTables = (db) => {
                 parent_hash text NOT NULL,
                 timestamp text NOT NULL
             );`,
-            'CREATE UNIQUE INDEX IF NOT EXISTS hash ON blocks(hash);',
-            'CREATE UNIQUE INDEX IF NOT EXISTS number ON blocks(number);'
+            'CREATE UNIQUE INDEX IF NOT EXISTS blocks_hash_key ON blocks(hash);',
+            'CREATE UNIQUE INDEX IF NOT EXISTS blocks_number ON blocks(number);'
+        ],
+        [
+            `CREATE TABLE IF NOT EXISTS transactions (
+                hash text NOT NULL,
+                block_number integer NOT NULL
+            );`,
+            'CREATE UNIQUE INDEX IF NOT EXISTS transactions_key ON transactions(hash);',
+            'CREATE INDEX IF NOT EXISTS transactions_block_number ON transactions(block_number);'
         ],
         [
             `CREATE TABLE IF NOT EXISTS cells (
-                number integer NOT NULL,
-                hash text NOT NULL,
-                parent_hash text NOT NULL,
-                timestamp text NOT NULL
+                transaction_hash text NOT NULL,
+                "index" integer NOT NULL,
+                capacity text NOT NULL,
+                lock_code_hash text,
+                lock_hash_type text,
+                lock_args text,
+                type_code_hash text,
+                type_hash_type text,
+                type_args text
             );`,
-            'CREATE UNIQUE INDEX IF NOT EXISTS hash ON blocks(hash);',
-            'CREATE UNIQUE INDEX IF NOT EXISTS number ON blocks(number);'
+            'CREATE UNIQUE INDEX IF NOT EXISTS cells_key ON cells(transaction_hash,"index");',
+            'CREATE INDEX IF NOT EXISTS cells_lock ON cells(lock_code_hash,lock_hash_type,lock_args);'
+        ],
+        [
+            `CREATE TABLE IF NOT EXISTS transactions_cells (
+                transaction_hash text NOT NULL,
+                cell_index integer NOT NULL,
+                is_input boolean NOT NULL
+            );`,
+            'CREATE UNIQUE INDEX IF NOT EXISTS transactions_cells_key ON transactions_cells(transaction_hash, cell_index);'
         ]
     ];
     return new Promise((resolve, reject) => {
         db.serialize(() => {
             db.run('BEGIN');
             for (const tableSqls of createTableSqls) {
-                for (const sql of tableSqls) 
-                    db.run(sql);
+                for (const sql of tableSqls) {
+                    db.run(sql, (err) => {
+                        if (err) 
+                            console.error(sql, err);
+                        
+                    });
+                }
             }
             db.run('COMMIT', (err) => {
                 if (err) {
