@@ -2,14 +2,16 @@
 
 const https = require('https');
 const http = require('http');
+const cluster = require('cluster');
 const async = require('async');
 const sqlite3 = require('sqlite3').verbose();
 const CKB = require('@nervosnetwork/ckb-sdk-core').default;
 
 const CKB_RPC_URL = process.env.CKB_RPC_URL || 'http://localhost:8114';
 const BLOCK_FETCH_NUM = process.env.BLOCK_FETCH_NUM || 10;
+const TARGET_BLOCK_NUMBER = process.env.TARGET_BLOCK_NUMBER;
+const FORCE_DRAIN_INTERVAL = process.env.FORCE_DRAIN_INTERVAL || 100000;
 const BLOCK_INSERT_SIZE = 10000;
-const FORCE_DRAIN_INTERVAL = 100000;
 
 const initSDK = (url) => {
     const ckb = new CKB(url);
@@ -73,7 +75,6 @@ const createTables = (db) => {
 
 const insertBlocks = (db, blocks) => {
     return new Promise((resolve, reject) => {
-        console.log(`processing blocks to ${BigInt(blocks[blocks.length - 1].header.number)}`);
         db.serialize(() => {
             db.run(`
                 BEGIN
@@ -108,71 +109,85 @@ const insertBlocks = (db, blocks) => {
     });
 };
 
-(
-    async () => {
-        const ckb = initSDK(CKB_RPC_URL);
-        const db = await connectDB('./db/ckb.sqlite');
+if (cluster.isMaster) {
+    const blocksProcessor = cluster.fork();
+    (
+        async () => {
+            const ckb = initSDK(CKB_RPC_URL);
 
+            const processorMessgerCargo = async.cargo((blocks, callback) => {
+                blocksProcessor.send({blocks}, () => {
+                    callback();
+                });
+            }, BLOCK_INSERT_SIZE);
+    
+            console.time('total lasted time');
+            const fetcherCargo = async.cargoQueue(async (tasks) => {
+                const firstTask = tasks[0];
+                const lastTask = tasks[tasks.length - 1];
+                const startNumber = firstTask[0];
+                const endNumber = lastTask[lastTask.length - 1];
+    
+                const results = await Promise.all(
+                    tasks.map(
+                        blockNumbers => Promise.all(
+                            blockNumbers.map(
+                                number => ckb.rpc.getBlockByNumber(number)
+                            )
+                        )
+                    )
+                );
+                if (startNumber % 1000n === 0n) {
+                    console.timeLog('total lasted time', ' ~ proceeded block number:', endNumber);
+                }
+    
+                const blocks = results.flat(1);
+                processorMessgerCargo.push(blocks);
+
+                if (startNumber % BigInt(FORCE_DRAIN_INTERVAL) === 0n) 
+                    await processorMessgerCargo.drain();
+                
+    
+                return results;
+            }, 2, 5);
+    
+            const tipBlockNumber = TARGET_BLOCK_NUMBER || await ckb.rpc.getTipBlockNumber();
+            for (let i = 0;; i++) {
+                const startNumber = BLOCK_FETCH_NUM * i;
+                let endNumber = BLOCK_FETCH_NUM * (i + 1);
+    
+                if (endNumber > tipBlockNumber) {
+                    endNumber = tipBlockNumber;
+                    break;
+                }
+    
+                const blockNumbers = Array.from(
+                    new Array(endNumber - startNumber),
+                    (x, i) => BigInt(startNumber + i)
+                );
+    
+                fetcherCargo.push([blockNumbers]);
+            }
+    
+            await fetcherCargo.drain();
+    
+        }
+    )();
+}
+else {
+    (async () => {
+        const db = await connectDB('./db/ckb.sqlite');
         await createTables(db);
 
         const dbCargo = async.cargo(async (blocks) => {
-            console.time(`inserting ${blocks.length} blocks to #: ${BigInt(blocks[blocks.length - 1].header.number)}`);
+            console.time(`inserting ${blocks.length} blocks to #${BigInt(blocks[blocks.length - 1].header.number)}`);
             await insertBlocks(db, blocks);
-            console.timeEnd(`inserting ${blocks.length} blocks to #: ${BigInt(blocks[blocks.length - 1].header.number)}`);
+            console.timeEnd(`inserting ${blocks.length} blocks to #${BigInt(blocks[blocks.length - 1].header.number)}`);
         }, BLOCK_INSERT_SIZE);
-
-        console.time(`fetch blocks`);
-        const fetcherCargo = async.cargoQueue(async (tasks) => {
-            const firstTask = tasks[0];
-            const lastTask = tasks[tasks.length - 1];
-            const startNumber = firstTask[0];
-            const endNumber = lastTask[lastTask.length - 1];
-
-            const results = await Promise.all(
-                tasks.map(
-                    blockNumbers => Promise.all(
-                        blockNumbers.map(
-                            number => ckb.rpc.getBlockByNumber(number)
-                        )
-                    )
-                )
-            );
-            console.log('proceeded block number:', endNumber);
-            console.timeLog(`fetch blocks`);
-
-            const blocks = results.flat(1);
+    
+        process.on('message', msg => {
+            const {blocks} = msg;
             dbCargo.push(blocks);
-
-            if (startNumber % BigInt(FORCE_DRAIN_INTERVAL) === 0n) {
-                await dbCargo.drain();
-            }
-
-            return results;
-        }, 2, 10);
-
-        const tipBlockNumber = await ckb.rpc.getTipBlockNumber();
-        for (let i = 0;; i++) {
-            const startNumber = BLOCK_FETCH_NUM * i;
-            let endNumber = BLOCK_FETCH_NUM * (i + 1);
-
-            if (endNumber > tipBlockNumber) {
-                endNumber = tipBlockNumber;
-                break;
-            }
-
-            const blockNumbers = Array.from(
-                new Array(endNumber - startNumber),
-                (x, i) => BigInt(startNumber + i)
-            );
-
-            // console.time(`fetch blocks ${startNumber} - ${endNumber}`);
-            fetcherCargo.push([blockNumbers], (err, completedTasks) => {
-                // console.timeEnd(`fetch blocks ${startNumber} - ${endNumber}`);
-            });
-        }
-
-        await fetcherCargo.drain();
-        await dbCargo.drain();
-
-    }
-)();
+        });
+    })();
+}
