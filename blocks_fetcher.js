@@ -9,7 +9,6 @@ const CKB_RPC_URL = process.env.CKB_RPC_URL || 'http://localhost:8114';
 const BLOCK_FETCH_NUM = process.env.BLOCK_FETCH_NUM || 10;
 const TARGET_BLOCK_NUMBER = process.env.TARGET_BLOCK_NUMBER;
 const FORCE_DRAIN_INTERVAL = process.env.FORCE_DRAIN_INTERVAL || 100000;
-const BLOCK_INSERT_SIZE = 100000;
 
 const initSDK = (url) => {
     const ckb = new CKB(url);
@@ -34,7 +33,7 @@ const initSDK = (url) => {
     return ckb;
 };
 
-const initFetcher = async (blocksProcessor) => {
+const initFetcher = async (blocksProcessor, BLOCK_INSERT_SIZE) => {
     const ckb = initSDK(CKB_RPC_URL);
 
     const processorMessgerCargo = async.cargo((blocks, callback) => {

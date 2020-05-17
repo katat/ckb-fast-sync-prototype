@@ -2,8 +2,6 @@
 const sqlite3 = require('sqlite3').verbose();
 const async = require('async');
 
-const BLOCK_INSERT_SIZE = 100000;
-
 const connectDB = (filePath) => {
     return new Promise((resolve, reject) => {
         const db = new sqlite3.Database(
@@ -98,13 +96,15 @@ const insertBlocks = (db, blocks) => {
                 INSERT INTO blocks (number, hash, parent_hash, timestamp) VALUES (?,?,?,?)
             `);
             for (const block of blocks) {
+                // console.log(block.transactions);
                 const {
                     header: {
                         number,
                         hash,
                         parentHash,
                         timestamp
-                    }
+                    },
+                    transactions
                 } = block;
 
                 statement.run([
@@ -113,6 +113,7 @@ const insertBlocks = (db, blocks) => {
                     parentHash,
                     timestamp
                 ]);
+                runInsertTransactionsStatements(db, number, transactions);
             }
 
             db.run('COMMIT', () => {
@@ -123,7 +124,21 @@ const insertBlocks = (db, blocks) => {
     });
 };
 
-const blocksProcessor = async () => {
+const runInsertTransactionsStatements = (db, blockNumber, txs) => {
+    const statement = db.prepare(`
+        INSERT INTO transactions (hash, block_number) VALUES (?,?)
+    `);
+    for (const tx of txs) {
+        const {hash} = tx;
+
+        statement.run([
+            hash,
+            blockNumber
+        ]);
+    }
+};
+
+const blocksProcessor = async (BLOCK_INSERT_SIZE) => {
     const db = await connectDB('./db/ckb.sqlite');
     await createTables(db);
     
@@ -134,9 +149,7 @@ const blocksProcessor = async () => {
     }, BLOCK_INSERT_SIZE);
     
     process.on('message', msg => {
-        const {
-            blocks
-        } = msg;
+        const {blocks} = msg;
         dbCargo.push(blocks);
     });
 };
