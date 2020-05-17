@@ -11,7 +11,7 @@ const CKB_RPC_URL = process.env.CKB_RPC_URL || 'http://localhost:8114';
 const BLOCK_FETCH_NUM = process.env.BLOCK_FETCH_NUM || 10;
 const TARGET_BLOCK_NUMBER = process.env.TARGET_BLOCK_NUMBER;
 const FORCE_DRAIN_INTERVAL = process.env.FORCE_DRAIN_INTERVAL || 100000;
-const BLOCK_INSERT_SIZE = 10000;
+const BLOCK_INSERT_SIZE = 100000;
 
 const initSDK = (url) => {
     const ckb = new CKB(url);
@@ -39,13 +39,13 @@ const initSDK = (url) => {
 const connectDB = (filePath) => {
     return new Promise((resolve, reject) => {
         const db = new sqlite3.Database(
-            filePath, 
+            filePath,
             (err) => {
                 if (err) {
                     console.error(err.message);
                     return reject(err);
                 }
-                
+
                 console.log('Connected to the database.');
                 resolve(db);
             });
@@ -53,28 +53,48 @@ const connectDB = (filePath) => {
 };
 
 const createTables = (db) => {
+    const createTableSqls = [
+        [
+            `CREATE TABLE IF NOT EXISTS blocks (
+                number integer NOT NULL,
+                hash text NOT NULL,
+                parent_hash text NOT NULL,
+                timestamp text NOT NULL
+            );`,
+            'CREATE UNIQUE INDEX IF NOT EXISTS hash ON blocks(hash);',
+            'CREATE UNIQUE INDEX IF NOT EXISTS number ON blocks(number);'
+        ],
+        [
+            `CREATE TABLE IF NOT EXISTS cells (
+                number integer NOT NULL,
+                hash text NOT NULL,
+                parent_hash text NOT NULL,
+                timestamp text NOT NULL
+            );`,
+            'CREATE UNIQUE INDEX IF NOT EXISTS hash ON blocks(hash);',
+            'CREATE UNIQUE INDEX IF NOT EXISTS number ON blocks(number);'
+        ]
+    ];
     return new Promise((resolve, reject) => {
-        db.run(
-            `
-                CREATE TABLE IF NOT EXISTS blocks (
-                    number integer NOT NULL,
-                    hash text NOT NULL,
-                    parent_hash text NOT NULL,
-                    timestamp text NOT NULL
-                );
-            `, 
-            (err) => {
+        db.serialize(() => {
+            db.run('BEGIN');
+            for (const tableSqls of createTableSqls) {
+                for (const sql of tableSqls) 
+                    db.run(sql);
+            }
+            db.run('COMMIT', (err) => {
                 if (err) {
                     console.error(err);
                     return reject(err);
                 }
                 resolve();
             });
+        });
     });
 };
 
 const insertBlocks = (db, blocks) => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         db.serialize(() => {
             db.run(`
                 BEGIN
@@ -94,9 +114,9 @@ const insertBlocks = (db, blocks) => {
                 } = block;
 
                 statement.run([
-                    number, 
-                    hash, 
-                    parentHash, 
+                    number,
+                    hash,
+                    parentHash,
                     timestamp
                 ]);
             }
@@ -116,18 +136,20 @@ if (cluster.isMaster) {
             const ckb = initSDK(CKB_RPC_URL);
 
             const processorMessgerCargo = async.cargo((blocks, callback) => {
-                blocksProcessor.send({blocks}, () => {
+                blocksProcessor.send({
+                    blocks
+                }, () => {
                     callback();
                 });
             }, BLOCK_INSERT_SIZE);
-    
+
             console.time('total lasted time');
             const fetcherCargo = async.cargoQueue(async (tasks) => {
                 const firstTask = tasks[0];
                 const lastTask = tasks[tasks.length - 1];
                 const startNumber = firstTask[0];
                 const endNumber = lastTask[lastTask.length - 1];
-    
+
                 const results = await Promise.all(
                     tasks.map(
                         blockNumbers => Promise.all(
@@ -137,40 +159,39 @@ if (cluster.isMaster) {
                         )
                     )
                 );
-                if (startNumber % 1000n === 0n) {
+                if (startNumber % 1000n === 0n) 
                     console.timeLog('total lasted time', ' ~ proceeded block number:', endNumber);
-                }
-    
+                
+
                 const blocks = results.flat(1);
                 processorMessgerCargo.push(blocks);
 
-                if (startNumber % BigInt(FORCE_DRAIN_INTERVAL) === 0n) 
+                if (startNumber % BigInt(FORCE_DRAIN_INTERVAL) === 0n)
                     await processorMessgerCargo.drain();
-                
-    
+
                 return results;
             }, 2, 5);
-    
+
             const tipBlockNumber = TARGET_BLOCK_NUMBER || await ckb.rpc.getTipBlockNumber();
             for (let i = 0;; i++) {
                 const startNumber = BLOCK_FETCH_NUM * i;
                 let endNumber = BLOCK_FETCH_NUM * (i + 1);
-    
+
                 if (endNumber > tipBlockNumber) {
                     endNumber = tipBlockNumber;
                     break;
                 }
-    
+
                 const blockNumbers = Array.from(
                     new Array(endNumber - startNumber),
                     (x, i) => BigInt(startNumber + i)
                 );
-    
+
                 fetcherCargo.push([blockNumbers]);
             }
-    
+
             await fetcherCargo.drain();
-    
+
         }
     )();
 }
@@ -184,9 +205,11 @@ else {
             await insertBlocks(db, blocks);
             console.timeEnd(`inserting ${blocks.length} blocks to #${BigInt(blocks[blocks.length - 1].header.number)}`);
         }, BLOCK_INSERT_SIZE);
-    
+
         process.on('message', msg => {
-            const {blocks} = msg;
+            const {
+                blocks
+            } = msg;
             dbCargo.push(blocks);
         });
     })();
