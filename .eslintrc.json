@@ -4,9 +4,12 @@
         "node": true,
         "mocha": true
     },
+    "globals": {
+        "BigInt": true
+    },
     "parserOptions": {
         "sourceType": "script",
-        "ecmaVersion": 9,
+        "ecmaVersion": 2020,
         "ecmaFeatures": {
             "impliedStrict": false
         }
