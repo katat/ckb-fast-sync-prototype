@@ -3,7 +3,7 @@ const fs = require('fs');
 const cluster = require('cluster');
 
 const blocksFetcher = require('./blocks_fetcher');
-const blocksProcessor = require('./blocks_processor');
+const {startIndexingBlocks} = require('./blocks_processor');
 
 const BLOCK_INSERT_SIZE = 10000;
 
@@ -18,5 +18,5 @@ if (cluster.isMaster) {
     blocksFetcher(blocksProcessor, BLOCK_INSERT_SIZE);
 }
 else {
-    blocksProcessor(BLOCK_INSERT_SIZE);
+    startIndexingBlocks(BLOCK_INSERT_SIZE);
 }

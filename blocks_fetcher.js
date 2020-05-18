@@ -6,7 +6,7 @@ const async = require('async');
 const CKB = require('@nervosnetwork/ckb-sdk-core').default;
 
 const CKB_RPC_URL = process.env.CKB_RPC_URL || 'http://localhost:8114';
-const BLOCK_FETCH_NUM = process.env.BLOCK_FETCH_NUM || 10;
+const BLOCK_FETCH_NUM = process.env.BLOCK_FETCH_NUM || 5;
 const TARGET_BLOCK_NUMBER = process.env.TARGET_BLOCK_NUMBER;
 const FORCE_DRAIN_INTERVAL = process.env.FORCE_DRAIN_INTERVAL || 100000;
 
@@ -71,7 +71,7 @@ const initFetcher = async (blocksProcessor, BLOCK_INSERT_SIZE) => {
             await processorMessgerCargo.drain();
 
         return results;
-    }, 2, 5);
+    }, 1, 5);
 
     const tipBlockNumber = TARGET_BLOCK_NUMBER || await ckb.rpc.getTipBlockNumber();
     for (let i = 0;; i++) {
