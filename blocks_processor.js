@@ -251,13 +251,14 @@ const startIndexingBlocks = async (BLOCK_INSERT_SIZE) => {
     }, BLOCK_INSERT_SIZE);
     
     process.on('message', async msg => {
-        const {blocks, completed} = msg;
+        const {blocks} = msg;
         dbCargo.push(blocks);
+        const lastBlock = blocks[blocks.length - 1];
 
-        if (completed) {
+        if (lastBlock === null) {
             await dbCargo.drain();
             console.time('create table indexes');
-            await createIndexes();
+            await createIndexes(db);
             console.timeEnd('create table indexes');
         }
     });

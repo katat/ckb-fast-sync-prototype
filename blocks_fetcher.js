@@ -35,6 +35,7 @@ const initSDK = (url) => {
 
 const initFetcher = async (blocksProcessor, BLOCK_INSERT_SIZE) => {
     const ckb = initSDK(CKB_RPC_URL);
+    const tipBlockNumber = TARGET_BLOCK_NUMBER || await ckb.rpc.getTipBlockNumber();
 
     const processorMessgerCargo = async.cargo((blocks, callback) => {
         blocksProcessor.send({
@@ -60,12 +61,17 @@ const initFetcher = async (blocksProcessor, BLOCK_INSERT_SIZE) => {
                 )
             )
         );
-        if (startNumber % 1000n === 0n) 
+        if (endNumber % 1000n === 0n) 
             console.timeLog('total lasted time', ' ~ proceeded block number:', endNumber);
                 
 
         const blocks = results.flat(1);
         processorMessgerCargo.push(blocks);
+
+        if (endNumber >= tipBlockNumber) {
+            await processorMessgerCargo.drain();
+            processorMessgerCargo.push(null);
+        }
 
         if (startNumber % BigInt(FORCE_DRAIN_INTERVAL) === 0n)
             await processorMessgerCargo.drain();
@@ -73,22 +79,22 @@ const initFetcher = async (blocksProcessor, BLOCK_INSERT_SIZE) => {
         return results;
     }, 1, 5);
 
-    const tipBlockNumber = TARGET_BLOCK_NUMBER || await ckb.rpc.getTipBlockNumber();
     for (let i = 0;; i++) {
         const startNumber = BLOCK_FETCH_NUM * i;
         let endNumber = BLOCK_FETCH_NUM * (i + 1);
 
-        if (endNumber > tipBlockNumber) {
+        if (endNumber > tipBlockNumber) 
             endNumber = tipBlockNumber;
-            break;
-        }
-
+        
         const blockNumbers = Array.from(
             new Array(endNumber - startNumber),
-            (x, i) => BigInt(startNumber + i)
+            (x, i) => BigInt(startNumber + i + 1)
         );
 
         fetcherCargo.push([blockNumbers]);
+
+        if (endNumber >= tipBlockNumber) 
+            break;
     }
 
     await fetcherCargo.drain();
