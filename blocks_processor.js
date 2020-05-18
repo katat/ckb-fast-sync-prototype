@@ -258,8 +258,11 @@ const startIndexingBlocks = async (BLOCK_INSERT_SIZE) => {
     
     process.on('message', async msg => {
         const {blocks} = msg;
-        dbCargo.push(blocks);
         const lastBlock = blocks[blocks.length - 1];
+        if (lastBlock === null) 
+            blocks.pop();
+        
+        dbCargo.push(blocks);
 
         if (lastBlock === null) {
             await dbCargo.drain();
