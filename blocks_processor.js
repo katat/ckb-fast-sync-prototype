@@ -26,7 +26,7 @@ const sqlitePragmas = (db) => {
         'PRAGMA LOCKING_MODE=EXCLUSIVE'
     ];
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         db.serialize(() => {
             for (const pragma of pragmas) {
                 db.run(pragma, (err) => {
