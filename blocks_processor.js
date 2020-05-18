@@ -18,6 +18,27 @@ const connectDB = (filePath) => {
     });
 };
 
+const sqlitePragmas = (db) => {
+    const pragmas = [
+        // 'PRAGMA TEMP_STORE=2',
+        'PRAGMA JOURNAL_MODE=WAL',
+        'PRAGMA SYNCHRONOUS=0',
+        'PRAGMA LOCKING_MODE=EXCLUSIVE'
+    ];
+
+    return new Promise((resolve, reject) => {
+        db.serialize(() => {
+            for (const pragma of pragmas) {
+                db.run(pragma, (err) => {
+                    if (err) 
+                        console.error(pragma, err);
+                });
+            }
+            resolve();
+        });
+    });
+};
+
 const createTables = (db) => {
     const createTableSqls = [
         [
@@ -122,22 +143,6 @@ const createIndexes = (db) => {
 const insertBlocks = (db, blocks) => {
     return new Promise((resolve) => {
         db.serialize(() => {
-            // db.run(`
-            //     PRAGMA TEMP_STORE=2
-            // `);
-            // db.run(`
-            //     PRAGMA JOURNAL_MODE=MEMORY
-            // `);
-            // db.run(`
-            //     PRAGMA SYNCHRONOUS=0
-            // `);
-            // db.run(`
-            //     PRAGMA LOCKING_MODE=EXCLUSIVE
-            // `);
-            db.run(`
-                BEGIN
-            `);
-
             const statement = db.prepare(`
                 INSERT INTO blocks (number, hash, parent_hash, timestamp) VALUES (?,?,?,?)
             `);
@@ -241,6 +246,7 @@ const runInsertCellsStatements = (db, tx) => {
 const startIndexingBlocks = async (BLOCK_INSERT_SIZE) => {
     const db = await connectDB('./db/ckb.sqlite');
     await createTables(db);
+    await sqlitePragmas(db);
     // await createIndexes(db);
     
     const dbCargo = async.cargo(async (blocks) => {
