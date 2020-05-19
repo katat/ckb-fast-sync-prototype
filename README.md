@@ -1,7 +1,7 @@
 # ckb-full-index-prototype
 
 ## Introduction
-This is a prototype aiming to demonstrate for full indexing for a CKB node, using pure javascript and a sqlite database.
+This is a prototype aiming to demonstrate full indexing for a CKB node with `sqlite` database on `nodejs`.
 
 Several table schemas have been drafted to capture the relationships between `cells`, `transactions` and `blocks`. 
 There are also indexes provided for these schemas to facilitate navigation between the relationship. 
