@@ -17,3 +17,6 @@ npm i
 ```
 npm start
 ```
+
+## Sqlite Data
+The `./db` folder will store the sqlite data. Deleting this folder will reset the indexing data.
