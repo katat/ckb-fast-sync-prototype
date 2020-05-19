@@ -19,4 +19,4 @@ npm start
 ```
 
 ## Sqlite Data
-The `./db` folder will store the sqlite data. Deleting this folder will reset the indexing data.
+The `./db` folder will hold the sqlite data. Deleting this folder will reset the indexing data.
